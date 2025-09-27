@@ -1,6 +1,6 @@
 // src/Chat.tsx
 
-import React, { useState, useRef, useEffect, FormEvent } from 'react';
+import React, { useState, useRef, useEffect, type FormEvent } from 'react';
 import './Chat.css';
 
 // ### NOVA INTERFACE ###
