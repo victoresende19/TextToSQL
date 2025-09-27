@@ -1,211 +1,331 @@
-"""Agente de Text-to-SQL com ChromaDB, OpenAI e SQLAlchemy usando LangGraph."""
-
 import os
 import json
 from functools import partial
-from typing import Dict
+from typing import Dict, Any, List, TypedDict
 
-# Libs de IA e Banco de Dados
+# --- Libs da API ---
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+import uvicorn
+
+# --- Libs do Agente (seu código original) ---
 from openai import OpenAI
 from dotenv import load_dotenv
 from langgraph.graph import END, StateGraph
-from sqlalchemy import text
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import SQLAlchemyError
+import chromadb
+from chromadb.utils import embedding_functions
 
-# Supondo que seus arquivos de modelo e DB estejam estruturados assim
-from model.query import SQLQuery
-from model.validation import ValidationDecision
-from model.state import GraphState
-from db.engine import create_db_engine
-from db.setup import get_dynamic_db_schemas, setup_chroma_vectorstore
-from utils.colors import Colors, print_node_info
+# --- Modelos Pydantic para a API ---
 
-# --- 1. CONFIGURAÇÃO PRINCIPAL ---
+class DBCredentials(BaseModel):
+    dialect: str = Field(..., description="Dialeto do SQLAlchemy", examples=["sqlite", "postgresql+psycopg2"])
+    connection_string: str = Field(..., description="String de conexão completa do SQLAlchemy", examples=["sqlite:///database.db", "postgresql+psycopg2://user:pass@host/dbname"])
+
+class TableInfo(BaseModel):
+    table_name: str
+    description: str
+
+class AgentConfiguration(BaseModel):
+    db_credentials: DBCredentials
+    tables: List[TableInfo]
+
+class QueryRequest(BaseModel):
+    question: str
+
+class QueryResponse(BaseModel):
+    answer: str
+
+# --- Estado Global da Aplicação ---
+# Armazenará o agente compilado e o histórico da conversa
+app_state: Dict[str, Any] = {}
+SUMMARY_THRESHOLD = 10 # Define o limite para resumir a conversa
+
+# --- Lógica do Agente Refatorada ---
+
+# Carrega configurações globais
 load_dotenv()
-DB_DIALECT = "sqlite"
-TABLES_TO_USE = ["clientes", "produtos", "vendas"]
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 CHAT_MODEL = "gpt-4o"
 EMBEDDING_MODEL = "text-embedding-3-small"
-TABLE_DESCRIPTIONS = {
-    "clientes": "Esta tabela armazena informações sobre os clientes. Contém nome, cidade e email de cada cliente.",
-    "produtos": "Esta tabela contém a lista de todos os produtos disponíveis para venda. Inclui o nome do produto e seu preço unitário.",
-    "vendas": "Esta é a tabela de transações, registrando todas as vendas realizadas, conectando clientes a produtos."
-}
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-# --- 4. NÓS DO GRAFO ---
+# (Seus modelos Pydantic do agente permanecem os mesmos)
+class SQLQuery(BaseModel):
+    query: str = Field(description="A query SQL completa para ser executada.")
 
+class ValidationDecision(BaseModel):
+    decision: str = Field(description="Responda 'SIM' se a resposta for relevante, 'NÃO' caso contrário.")
+
+# ### ALTERAÇÃO: Definindo um estado mais explícito para o grafo ###
+class GraphState(TypedDict):
+    question: str
+    tables: str
+    sql_query: str
+    query_result: str
+    final_answer: str
+    error: str
+    retries: int
+    history: List[Dict[str, str]] # Adicionado para carregar o histórico da conversa
+
+# (Nós do Grafo)
 def route_tables_node(state: GraphState, chroma_collection) -> Dict:
-    """Nó 1: Reseta o estado e seleciona as tabelas."""
-    print_node_info("Roteador de Tabelas (ChromaDB) 🔎", {})
+    # Este nó não chama a LLM, então permanece inalterado.
     question = state["question"]
     results = chroma_collection.query(query_texts=[question], n_results=3)
     retrieved_schemas = set(meta['schema'] for meta in results['metadatas'][0])
     selected_tables = [meta['table_name'] for meta in results['metadatas'][0]]
-
     if "vendas" in selected_tables:
         for table in ["clientes", "produtos"]:
-            retrieved_schemas.add(chroma_collection.get(ids=[f"{table}_doc"])['metadatas'][0]['schema'])
-            if table not in selected_tables:
-                selected_tables.append(table)
-    
+            if table in [t.table_name for t in app_state.get("tables_info", [])]:
+                retrieved_schemas.add(chroma_collection.get(ids=[f"{table}_doc"])['metadatas'][0]['schema'])
+                if table not in selected_tables: selected_tables.append(table)
     return {"tables": "\n".join(list(retrieved_schemas)), "retries": 0, "error": None}
 
+# ### ALTERAÇÃO: Uso de system/user/assistant roles ###
 def generate_sql_node(state: GraphState, dialect: str) -> Dict:
-    """Nó 2: Gera a query SQL."""
-
-    prompt = f"""
-    Gere uma única query SQL (dialeto SQLite) para responder à pergunta: 
-    '{state['question']}' 
+    system_prompt = f"Você é um especialista em SQL. Sua tarefa é gerar uma única e sintaticamente correta query SQL no dialeto {dialect} para responder à pergunta do usuário, utilizando os schemas de tabela fornecidos. Responda apenas com a query."
     
-    Usando os schemas:
-    {state['tables']}\n{ 'Erro anterior, corrija: ' + state['error'] if state.get('error') else '' }
+    user_prompt = f"Pergunta: '{state['question']}'\n\nSchemas:\n{state['tables']}\n\n{ 'Erro anterior, corrija: ' + state['error'] if state.get('error') else '' }"
 
-    Certifique-se de que a query seja sintaticamente correta e otimizada.
-    Responda apenas com a query SQL, sem explicações adicionais.
-    """
+    messages = [
+        {"role": "system", "content": system_prompt},
+        *state.get('history', []), # Adiciona o histórico da conversa
+        {"role": "user", "content": user_prompt}
+    ]
 
     response = client.chat.completions.create(
-        model=CHAT_MODEL, messages=[{"role": "user", "content": prompt}],
-        tools=[{"type": "function", "function": {"name": "sql_query", "parameters": SQLQuery.model_json_schema()}}],
-        tool_choice={"type": "function", "function": {"name": "sql_query"}},
+        model=CHAT_MODEL, 
+        messages=messages, 
+        tools=[{"type": "function", "function": {"name": "sql_query", "parameters": SQLQuery.model_json_schema()}}], 
+        tool_choice={"type": "function", "function": {"name": "sql_query"}}
     )
     sql_query = SQLQuery(**json.loads(response.choices[0].message.tool_calls[0].function.arguments)).query
-    print_node_info(f"Gerador de SQL (Dialeto: {dialect}) ✍️", {"SQL Gerado": f"\n```sql\n{sql_query}\n```"})
     return {"sql_query": sql_query, "error": None}
 
 def execute_sql_node(state: GraphState, engine) -> dict:
-    """Nó 3: Executa a query SQL."""
-    # ### ALTERAÇÃO ### Garante que não execute se o limite já foi atingido
-    if state.get("retries", 0) >= 3:
-        return {"error": "Limite de tentativas atingido."}
+    # Este nó não chama a LLM, então permanece inalterado.
+    if state.get("retries", 0) >= 3: return {"error": "Limite de tentativas atingido."}
     try:
         with engine.connect() as conn:
             result = conn.execute(text(state["sql_query"])).mappings().all()
-        result_as_dict = [dict(row) for row in result]
-        print_node_info("Executor de SQL (SQLAlchemy) 🚀", {"Resultado da Execução": result_as_dict or "Query executada com sucesso, mas sem retorno."})
         return {"query_result": str(result), "error": None}
     except SQLAlchemyError as e:
-        print_node_info("Executor de SQL (SQLAlchemy) 🚀", {"Erro de SQL": str(e.orig)})
         return {"error": f"Erro de banco de dados: {e.orig}", "retries": state.get("retries", 0) + 1}
 
+# ### ALTERAÇÃO: Uso de system/user/assistant roles ###
 def validate_relevance_node(state: GraphState) -> Dict:
-    """Nó 4: Valida se o resultado responde à pergunta."""
+    system_prompt = "Você é um assistente de validação. Analise a pergunta do usuário, a query SQL executada e o resultado obtido. Sua única tarefa é decidir se o resultado responde adequadamente à pergunta original. Responda estritamente com 'SIM' ou 'NÃO'."
+    
+    user_prompt = f"A pergunta original foi: '{state['question']}'.\nA query SQL executada foi: '{state['sql_query']}'.\nO resultado obtido foi: '{state['query_result']}'.\n\nEste resultado responde à pergunta?"
 
-    prompt = f"""
-    A pergunta foi: "{state['question']}". 
-    A query executada foi "{state['sql_query']}" e o resultado foi "{state['query_result']}". 
-    Este resultado responde à pergunta? Responda 'SIM' ou 'NÃO'.
-    """
+    messages = [
+        {"role": "system", "content": system_prompt},
+        # O histórico não é essencial aqui, mas pode ser mantido por consistência
+        # *state.get('history', []), 
+        {"role": "user", "content": user_prompt}
+    ]
 
     response = client.chat.completions.create(
-        model=CHAT_MODEL, messages=[{"role": "user", "content": prompt}],
-        tools=[{"type": "function", "function": {"name": "validation", "parameters": ValidationDecision.model_json_schema()}}],
-        tool_choice={"type": "function", "function": {"name": "validation"}},
+        model=CHAT_MODEL, 
+        messages=messages, 
+        tools=[{"type": "function", "function": {"name": "validation", "parameters": ValidationDecision.model_json_schema()}}], 
+        tool_choice={"type": "function", "function": {"name": "validation"}}
     )
     decision = ValidationDecision(**json.loads(response.choices[0].message.tool_calls[0].function.arguments)).decision
-    print_node_info("Validador de Relevância ✅", {"Decisão da Validação": decision.upper()})
-    
-    if decision.upper() == "NÃO":
-        return {"error": "O resultado não é relevante para a pergunta.", "retries": state.get("retries", 0) + 1}
+    if decision.upper() == "NÃO": return {"error": "O resultado não é relevante.", "retries": state.get("retries", 0) + 1}
     return {"error": None}
 
+# ### ALTERAÇÃO: Uso de system/user/assistant roles ###
 def generate_final_answer_node(state: GraphState) -> Dict:
-    """Nó 5: Gera a resposta final em linguagem natural."""
-    prompt = f"Com base na pergunta '{state['question']}' e nos dados '{state['query_result']}', formule uma resposta clara em linguagem natural."
-    response = client.chat.completions.create(model=CHAT_MODEL, messages=[{"role": "user", "content": prompt}])
-    final_answer = response.choices[0].message.content
-    print_node_info("Gerador de Resposta Final 🗣️", {"Resposta Final": final_answer})
-    return {"final_answer": final_answer}
+    system_prompt = "Você é um assistente prestativo. Sua tarefa é formular uma resposta clara e concisa em linguagem natural para o usuário, com base na pergunta original e nos dados retornados pela consulta ao banco de dados."
+    
+    user_prompt = f"Pergunta do usuário: '{state['question']}'.\nDados obtidos: '{state['query_result']}'.\n\nFormule a resposta final."
 
-# --- 5. LÓGICA CONDICIONAL DO GRAFO ---
+    messages = [
+        {"role": "system", "content": system_prompt},
+        *state.get('history', []), # Adiciona o histórico da conversa
+        {"role": "user", "content": user_prompt}
+    ]
+
+    response = client.chat.completions.create(
+        model=CHAT_MODEL, 
+        messages=messages
+    )
+    return {"final_answer": response.choices[0].message.content}
+
 def decide_next_node(state: GraphState) -> str:
-    """Decide qual o próximo passo e retorna um RÓTULO para o gráfico."""
-    print_node_info("Nó de Decisão 🚦", {"Estado Atual": "Analisando..."})
-    
+    # Inalterado
     if state.get("error"):
-        retries = state.get("retries", 0)
-        if retries >= 3:
-            print(f"{Colors.RED}LIMITE DE {retries} TENTATIVAS ATINGIDO. FINALIZANDO.{Colors.ENDC}")
-            # Rótulo para a aresta que vai para o FIM
-            return "Limite de Tentativas Atingido" 
-        else:
-            print(f"{Colors.YELLOW}Erro detectado. Tentativa {retries}/3. Voltando para gerar novo SQL.{Colors.ENDC}")
-            # Rótulo para a aresta que volta para a geração de SQL
-            return "Erro (SQL ou Validação)"
-    
-    print(f"{Colors.GREEN}Validação bem-sucedida. Gerando resposta final.{Colors.ENDC}")
-    # Rótulo para a aresta que segue para a resposta final
+        if state.get("retries", 0) >= 3: return "Limite de Tentativas Atingido"
+        return "Erro (SQL ou Validação)"
     return "Sucesso na Validação"
 
-# --- 6. EXECUÇÃO PRINCIPAL ---
-if __name__ == "__main__":
-    print(f"{Colors.BOLD}Iniciando agente para o dialeto: {DB_DIALECT}{Colors.ENDC}")
+# --- Aplicação FastAPI ---
+app = FastAPI(
+    title="Agente Text-to-SQL Dinâmico com Memória",
+    description="Uma API para conversar com bancos de dados usando linguagem natural, com gerenciamento de contexto.",
+    version="1.1.0"
+)
 
-    db_engine = create_db_engine(DB_DIALECT)
-    dynamic_schemas = get_dynamic_db_schemas(db_engine, TABLES_TO_USE)
+app = FastAPI()
+
+# 2. Defina as origens permitidas (seu frontend)
+origins = [
+    "http://localhost:5173", # URL padrão do Vite
+    "http://localhost:3000", # URL padrão do create-react-app
+]
+
+# 3. Adicione o middleware ao seu app
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"], # Permite todos os métodos (GET, POST, etc.)
+    allow_headers=["*"], # Permite todos os cabeçalhos
+)
+
+# ### NOVA FUNÇÃO: Resumir o histórico da conversa ###
+def summarize_conversation(history: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    """Usa a LLM para criar um resumo conciso do histórico da conversa."""
+    history_str = "\n".join([f"{msg['role']}: {msg['content']}" for msg in history])
     
-    docs = [TABLE_DESCRIPTIONS.get(name, f"Descrição da tabela {name}") for name in dynamic_schemas.keys()]
-    metas = [{"table_name": name, "schema": schema} for name, schema in dynamic_schemas.items()]
-    ids = [f"{name}_doc" for name in dynamic_schemas.keys()]
-    chroma_collection = setup_chroma_vectorstore(
-        documents=docs, metadatas=metas, ids=ids,
-        openai_api_key=OPENAI_API_KEY, embedding_model=EMBEDDING_MODEL
-    )
+    prompt = f"""
+    Resuma a seguinte conversa entre um usuário e um assistente de forma concisa. 
+    O resumo deve capturar os principais pontos, perguntas e respostas para que o contexto seja mantido em futuras interações, mas de forma muito mais curta.
 
-    workflow = StateGraph(GraphState)
-
-    # Adiciona os nós (nenhuma mudança aqui)
-    workflow.add_node("route_tables", partial(route_tables_node, chroma_collection=chroma_collection))
-    workflow.add_node("generate_sql", partial(generate_sql_node, dialect=DB_DIALECT))
-    workflow.add_node("execute_sql", partial(execute_sql_node, engine=db_engine))
-    workflow.add_node("validate_relevance", validate_relevance_node)
-    workflow.add_node("generate_final_answer", generate_final_answer_node)
-
-    # Define a estrutura do grafo
-    workflow.set_entry_point("route_tables")
-    workflow.add_edge("route_tables", "generate_sql")
-    workflow.add_edge("generate_sql", "execute_sql")
-    workflow.add_edge("execute_sql", "validate_relevance")
-    workflow.add_edge("generate_final_answer", END)
+    Conversa a ser resumida:
+    {history_str}
+    """
     
-    # ### ALTERAÇÃO PRINCIPAL AQUI ###
-    # Atualiza o mapeamento de rótulos para nós
-    workflow.add_conditional_edges(
-        "validate_relevance",
-        decide_next_node,
-        {
-            # Rótulo da aresta:          Próximo nó
-            "Erro (SQL ou Validação)":  "generate_sql",
-            "Sucesso na Validação":     "generate_final_answer",
-            "Limite de Tentativas Atingido": END
+    try:
+        response = client.chat.completions.create(
+            model=CHAT_MODEL,
+            messages=[{"role": "system", "content": "Você é um especialista em resumir conversas."}, {"role": "user", "content": prompt}]
+        )
+        summary = response.choices[0].message.content
+        # Retorna um novo histórico com o resumo e as últimas 4 mensagens para manter o contexto recente
+        new_history = [
+            {"role": "system", "content": f"Isto é um resumo da conversa até agora: {summary}"},
+            *history[-4:]
+        ]
+        print("--- CONVERSA RESUMIDA ---")
+        return new_history
+    except Exception as e:
+        print(f"Erro ao resumir a conversa: {e}. Mantendo o histórico antigo.")
+        return history # Retorna o histórico original em caso de erro
+    
+@app.get("/tables", response_model=List[TableInfo], tags=["Configuração"])
+def get_configured_tables():
+    """
+    Retorna a lista de tabelas que foram configuradas no agente.
+    """
+    if "tables_info" not in app_state or not app_state["tables_info"]:
+        raise HTTPException(
+            status_code=404, 
+            detail="Nenhuma base de dados configurada. Use o endpoint /configure_agent primeiro."
+        )
+    # Retorna a lista de tabelas armazenada no estado da aplicação
+    return app_state["tables_info"]
+
+@app.post("/configure_agent", status_code=200)
+def configure_agent(config: AgentConfiguration):
+    """
+    Configura o agente e inicializa/reseta o histórico da conversa.
+    """
+    try:
+        db_engine = create_engine(config.db_credentials.connection_string)
+        table_names = [t.table_name for t in config.tables]
+        inspector = inspect(db_engine)
+        schemas = {
+            name: f"CREATE TABLE {name} (\n" + ",\n".join([f"  {col['name']} {str(col['type'])}" for col in inspector.get_columns(name)]) + "\n);"
+            for name in table_names if inspector.get_columns(name)
         }
-    )
-    
-    app = workflow.compile()
-    
-    image_bytes = app.get_graph(xray=True).draw_mermaid_png()
-    with open('grafo_final.png', "wb") as f:
-        f.write(image_bytes)
-    print(f"\n{Colors.GREEN}Imagem do grafo salva como 'grafo_final.png'{Colors.ENDC}")
 
-    question = "Qual o nome e email do cliente que mais gastou em janeiro de 2024? Mostre também o valor total gasto."
-    initial_state = {"question": question}
+        chroma_client = chromadb.Client()
+        embedding_func = embedding_functions.OpenAIEmbeddingFunction(api_key=OPENAI_API_KEY, model_name=EMBEDDING_MODEL)
+        chroma_collection = chroma_client.get_or_create_collection(name="dynamic_db_agent_memory", embedding_function=embedding_func)
+        
+        ids = [f"{t.table_name}_doc" for t in config.tables]
+        if chroma_collection.count() > 0 and chroma_collection.get(ids=ids)['ids']:
+             chroma_collection.delete(ids=ids)
+        
+        chroma_collection.add(
+            documents=[t.description for t in config.tables],
+            metadatas=[{"table_name": t.table_name, "schema": schemas.get(t.table_name, "")} for t in config.tables],
+            ids=ids
+        )
+        
+        workflow = StateGraph(GraphState)
+        workflow.add_node("route_tables", partial(route_tables_node, chroma_collection=chroma_collection))
+        workflow.add_node("generate_sql", partial(generate_sql_node, dialect=config.db_credentials.dialect))
+        workflow.add_node("execute_sql", partial(execute_sql_node, engine=db_engine))
+        workflow.add_node("validate_relevance", validate_relevance_node)
+        workflow.add_node("generate_final_answer", generate_final_answer_node)
 
-    print(f"\n{Colors.BOLD}--- INICIANDO EXECUÇÃO DO AGENTE ---{Colors.ENDC}")
-    print(f"{Colors.YELLOW}Pergunta:{Colors.ENDC} {Colors.GREEN}{question}{Colors.ENDC}")
- 
-    final_state = app.invoke(
-        initial_state,
-        {"recursion_limit": 15}
-    )
+        workflow.set_entry_point("route_tables")
+        workflow.add_edge("route_tables", "generate_sql")
+        workflow.add_edge("generate_sql", "execute_sql")
+        workflow.add_edge("execute_sql", "validate_relevance")
+        workflow.add_conditional_edges("validate_relevance", decide_next_node, {
+            "Erro (SQL ou Validação)": "generate_sql",
+            "Sucesso na Validação": "generate_final_answer",
+            "Limite de Tentativas Atingido": END
+        })
+        workflow.add_edge("generate_final_answer", END)
+        
+        app_state["agent"] = workflow.compile()
+        app_state["db_engine"] = db_engine
+        app_state["tables_info"] = config.tables
+        # ### ALTERAÇÃO: Inicializa o histórico da conversa ###
+        app_state["conversation_history"] = []
+        
+        return {"message": "Agente configurado com sucesso. Histórico da conversa iniciado."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Falha ao configurar o agente: {str(e)}")
+
+
+@app.post("/query", response_model=QueryResponse)
+def query_agent(request: QueryRequest):
+    """
+    Envia uma pergunta para o agente, gerenciando o histórico da conversa.
+    """
+    if "agent" not in app_state:
+        raise HTTPException(status_code=400, detail="Agente não configurado. Por favor, chame o endpoint /configure_agent primeiro.")
     
-    print(f"\n{Colors.BOLD}--- RESULTADO FINAL ---{Colors.ENDC}")
-    if final_state.get('error'):
-        print(f"{Colors.RED}O agente falhou após {final_state.get('retries')} tentativas.{Colors.ENDC}")
-    else:
-        print(f"Pergunta: {Colors.YELLOW}{question}{Colors.ENDC}")
-        print(f"Respota: {Colors.GREEN}{final_state.get('final_answer')}{Colors.ENDC}")
+    try:
+        # ### ALTERAÇÃO: Gerenciamento do histórico ###
+        history = app_state.get("conversation_history", [])
+        
+        # Verifica se o histórico precisa ser resumido
+        if len(history) >= SUMMARY_THRESHOLD:
+            history = summarize_conversation(history)
+            app_state["conversation_history"] = history
 
-    db_engine.dispose()
+        agent = app_state["agent"]
+        initial_state = {
+            "question": request.question,
+            "history": history # Passa o histórico para o grafo
+        }
+        
+        final_state = agent.invoke(initial_state, {"recursion_limit": 15})
+        
+        if final_state.get('error'):
+            raise HTTPException(status_code=500, detail=f"O agente falhou após múltiplas tentativas. Último erro: {final_state['error']}")
+        
+        answer = final_state.get('final_answer', "Não foi possível gerar uma resposta.")
+        
+        # ### ALTERAÇÃO: Atualiza o histórico com a nova interação ###
+        history.append({"role": "user", "content": request.question})
+        history.append({"role": "assistant", "content": answer})
+        app_state["conversation_history"] = history
+        
+        return QueryResponse(answer=answer)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro durante a execução da query: {str(e)}")
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
