@@ -176,6 +176,7 @@ app = FastAPI()
 origins = [
     "http://localhost:5173", # URL padrão do Vite
     "http://localhost:3000", # URL padrão do create-react-app
+    "https://text-to-sql-oraculo.vercel.app/"
 ]
 
 # 3. Adicione o middleware ao seu app
