@@ -16,7 +16,8 @@ interface Table {
 
 const API_URL = "https://texttosql-k8p8.onrender.com/configure_agent";
 
-const ConfigModal: React.FC<ConfigModalProps> = ({ onConfigSuccess }) => {
+// 👇 CORREÇÃO 1: Adicione 'onClose' na desestruturação das props
+const ConfigModal: React.FC<ConfigModalProps> = ({ onConfigSuccess, onClose }) => {
     // Estados para os campos do formulário
     const [dialect, setDialect] = useState('sqlite');
     const [connectionString, setConnectionString] = useState('sqlite:///db/database.db');
@@ -83,6 +84,9 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ onConfigSuccess }) => {
     return (
         <div className="modal-overlay">
             <div className="modal-content">
+                {/* 👇 CORREÇÃO 2: Adicione o botão para usar a função onClose */}
+                <button className="close-btn" onClick={onClose}>&times;</button>
+
                 <h2>Configurar Agente de Banco de Dados</h2>
                 <p>Forneça as informações de conexão e descreva as tabelas que serão consultadas.</p>
 
