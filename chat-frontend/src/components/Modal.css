@@ -1,0 +1,166 @@
+/* src/Modal.css */
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  padding: 2.5rem;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 700px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+.modal-content h2 {
+  text-align: center;
+  margin-bottom: 0.5rem;
+  color: #333;
+}
+
+.modal-content p {
+  text-align: center;
+  margin-bottom: 2rem;
+  color: #666;
+}
+
+.modal-content form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.modal-content fieldset {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.modal-content legend {
+  padding: 0 0.5rem;
+  font-weight: 500;
+  color: #764ba2;
+}
+
+.modal-content label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: #444;
+}
+
+.modal-content input[type="text"] {
+  width: 100%;
+  padding: 0.8rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 1rem;
+}
+
+.table-entry {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.table-entry input:first-of-type {
+  flex: 1;
+}
+
+.table-entry input:last-of-type {
+  flex: 2;
+}
+
+.add-btn, .remove-btn {
+  border: none;
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 0.5rem 0.8rem;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.add-btn {
+  background-color: #e8eaf6;
+  color: #3f51b5;
+  align-self: flex-start;
+}
+.add-btn:hover {
+  background-color: #c5cae9;
+}
+
+.remove-btn {
+  background-color: #fce4ec;
+  color: #d32f2f;
+  font-size: 1.2rem;
+  line-height: 1;
+  padding: 0.4rem 0.8rem;
+}
+.remove-btn:hover {
+  background-color: #f8bbd0;
+}
+
+.submit-btn {
+  padding: 1rem;
+  border: none;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 8px;
+  font-size: 1.1rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.submit-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.error-message {
+  background-color: #ffebee;
+  color: #c62828;
+  padding: 0.8rem;
+  border-radius: 6px;
+  text-align: center;
+}
+
+/* src/components/Modal.css */
+/* ... (estilos existentes) ... */
+
+.modal-content {
+  position: relative; /* Necessário para posicionar o botão de fechar */
+}
+
+.close-btn {
+  position: absolute;
+  top: 15px;
+  right: 20px;
+  background: none;
+  border: none;
+  font-size: 2.5rem;
+  color: #aaa;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+}
+
+.close-btn:hover {
+  color: #333;
+}

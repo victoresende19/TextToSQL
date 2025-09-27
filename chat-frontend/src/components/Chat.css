@@ -1,0 +1,182 @@
+/* src/Chat.css */
+
+/* Reset básico e fonte padrão */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  /* O degradê principal da aplicação */
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  color: #333;
+}
+
+/* Container principal do chat */
+.chat-container {
+  width: 100%;
+  max-width: 600px;
+  height: 80vh;
+  background-color: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Cabeçalho */
+.chat-header {
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid #e0e0e0;
+  text-align: center;
+}
+
+.chat-header h1 {
+  font-size: 1.5rem;
+  color: #3f51b5;
+}
+
+.chat-header p {
+  color: #757575;
+  font-size: 0.9rem;
+}
+
+/* Área das mensagens */
+.chat-messages {
+  flex-grow: 1;
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.message {
+  max-width: 75%;
+  padding: 12px 18px;
+  border-radius: 20px;
+  line-height: 1.5;
+  word-wrap: break-word;
+}
+
+/* Mensagem do usuário (direita) */
+.message.user {
+  align-self: flex-end;
+  background: linear-gradient(135deg, #3f51b5 0%, #5c6bc0 100%);
+  color: white;
+  border-bottom-right-radius: 4px;
+}
+
+/* Mensagem do bot (esquerda) */
+.message.bot {
+  align-self: flex-start;
+  background-color: #f1f3f6;
+  color: #333;
+  border-bottom-left-radius: 4px;
+}
+
+/* Formulário de input */
+.chat-input-form {
+  padding: 15px;
+  border-top: 1px solid #e0e0e0;
+  background-color: #fff;
+}
+
+.chat-input-form form {
+  display: flex;
+  gap: 10px;
+}
+
+.chat-input-form input {
+  flex-grow: 1;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 25px;
+  font-size: 1rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.chat-input-form input:focus {
+  border-color: #667eea;
+}
+
+.chat-input-form button {
+  padding: 12px 20px;
+  border: none;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 25px;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: bold;
+  transition: opacity 0.2s;
+}
+
+.chat-input-form button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Indicador "digitando..." */
+.typing-indicator {
+  display: flex;
+  align-items: center;
+  padding: 15px 20px;
+}
+
+.typing-indicator span {
+  height: 8px;
+  width: 8px;
+  background-color: #90a4ae;
+  border-radius: 50%;
+  display: inline-block;
+  margin: 0 2px;
+  animation: bounce 1.4s infinite ease-in-out both;
+}
+
+.typing-indicator span:nth-of-type(1) { animation-delay: -0.32s; }
+.typing-indicator span:nth-of-type(2) { animation-delay: -0.16s; }
+
+@keyframes bounce {
+  0%, 80%, 100% { transform: scale(0); }
+  40% { transform: scale(1.0); }
+}
+
+/* ### NOVOS ESTILOS PARA A LISTA DE TABELAS ### */
+.tables-info {
+  margin-top: 10px;
+  font-size: 0.85rem;
+  color: #555;
+}
+
+.tables-info > span {
+  font-weight: 500;
+  margin-right: 8px;
+}
+
+.tables-list {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+}
+
+.table-tag {
+  background-color: #e8eaf6;
+  color: #3f51b5;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: help; /* Mostra que o item tem uma dica (tooltip) */
+}
