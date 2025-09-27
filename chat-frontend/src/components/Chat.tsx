@@ -15,7 +15,7 @@ interface Message {
     sender: 'user' | 'bot';
 }
 
-const API_URL = "https://texttosql-k8p8.onrender.com/";
+const API_URL = import.meta.env.VITE_API_BASE_URL;;
 
 const Chat: React.FC = () => {
     const [messages, setMessages] = useState<Message[]>([]);
@@ -32,7 +32,7 @@ const Chat: React.FC = () => {
     useEffect(() => {
         const fetchTables = async () => {
             try {
-                const response = await fetch(`${API_URL}/tables`);
+                const response = await fetch(`${API_URL}/configure_agent`);
                 if (!response.ok) {
                     throw new Error("Agente não configurado no backend.");
                 }

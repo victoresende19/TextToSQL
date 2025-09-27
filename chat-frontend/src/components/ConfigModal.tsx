@@ -14,7 +14,7 @@ interface Table {
     description: string;
 }
 
-const API_URL = "http://127.0.0.1:8000/configure_agent";
+const API_URL = "https://texttosql-k8p8.onrender.com/configure_agent";
 
 const ConfigModal: React.FC<ConfigModalProps> = ({ onConfigSuccess }) => {
     // Estados para os campos do formulário
