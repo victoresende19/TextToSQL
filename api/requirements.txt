@@ -4,3 +4,4 @@ sqlalchemy
 openai
 chromadb
 langgraph
+psycopg2
