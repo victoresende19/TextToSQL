@@ -4,4 +4,4 @@ sqlalchemy
 openai
 chromadb
 langgraph
-psycopg2
+psycopg2-binary

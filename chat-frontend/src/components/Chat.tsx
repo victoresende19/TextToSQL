@@ -32,7 +32,7 @@ const Chat: React.FC = () => {
     useEffect(() => {
         const fetchTables = async () => {
             try {
-                const response = await fetch(`${API_URL}/configure_agent`);
+                const response = await fetch(`${API_URL}/tables`);
                 if (!response.ok) {
                     throw new Error("Agente não configurado no backend.");
                 }
