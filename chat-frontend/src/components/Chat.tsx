@@ -15,7 +15,7 @@ interface Message {
     sender: 'user' | 'bot';
 }
 
-const API_URL = "http://127.0.0.1:8000";
+const API_URL = "https://texttosql-k8p8.onrender.com/";
 
 const Chat: React.FC = () => {
     const [messages, setMessages] = useState<Message[]>([]);

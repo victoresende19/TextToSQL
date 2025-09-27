@@ -230,6 +230,11 @@ def get_configured_tables():
     # Retorna a lista de tabelas armazenada no estado da aplicação
     return app_state["tables_info"]
 
+@app.get("/")
+async def root():
+    """ Endpoint raiz para verificar se a API está funcionando."""
+    return {"message": "Text-to-SQL Agent API is running."}
+
 @app.post("/configure_agent", status_code=200)
 def configure_agent(config: AgentConfiguration):
     """
