@@ -3,6 +3,8 @@
 
 Este projeto é uma aplicação web completa que permite a usuários não-técnicos fazerem perguntas complexas a um banco de dados (como SQLite, SQL Server, PostgreSQL, etc.) usando apenas a linguagem do dia a dia. A IA traduz a pergunta em uma consulta SQL, executa no banco e devolve a resposta de forma clara e compreensível.
 
+![alt text](image.png)
+
 # ✨ Funcionalidades Principais
 - **Interface de Chat Intuitiva:** Uma interface de chat moderna e responsiva construída com React e TypeScript.
 - **Configuração Dinâmica:** Um modal de configuração permite que o usuário conecte a aplicação a qualquer banco de dados suportado pelo SQLAlchemy, sem precisar alterar o código.
@@ -91,3 +93,7 @@ O projeto é dividido em duas partes: Backend (servidor FastAPI) e Frontend (apl
 Obs.: A aplicação ja possui dados de exemplo. Dessa forma você pode testar de maneira simples.
 - **Exemplo:** "Qual cliente da cidade de São Paulo gastou mais no total?"
 - **Exemplo:** "Liste os 5 produtos mais vendidos no último mês."
+
+# Fluxo Agente
+
+![alt text](image-1.png)
