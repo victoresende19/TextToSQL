@@ -14,7 +14,7 @@ interface Table {
     description: string;
 }
 
-const API_URL = "https://texttosql-k8p8.onrender.com/configure_agent";
+const API_URL = import.meta.env.VITE_API_BASE_URL;
 
 // 👇 CORREÇÃO 1: Adicione 'onClose' na desestruturação das props
 const ConfigModal: React.FC<ConfigModalProps> = ({ onConfigSuccess, onClose }) => {
@@ -59,7 +59,7 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ onConfigSuccess, onClose }) =
         };
 
         try {
-            const response = await fetch(API_URL, {
+            const response = await fetch(`${API_URL}/configure_agent`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),

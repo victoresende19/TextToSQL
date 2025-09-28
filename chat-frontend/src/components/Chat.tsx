@@ -15,7 +15,7 @@ interface Message {
     sender: 'user' | 'bot';
 }
 
-const API_URL = import.meta.env.VITE_API_BASE_URL;;
+const API_URL = import.meta.env.VITE_API_BASE_URL;
 
 const Chat: React.FC = () => {
     const [messages, setMessages] = useState<Message[]>([]);
