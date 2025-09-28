@@ -41,11 +41,7 @@ O projeto é dividido em duas partes: Backend (servidor FastAPI) e Frontend (apl
 
     a. Clone o repositório e prepare o ambiente:
     ```
-    # Clone o repositório (caso ainda não tenha feito)
-    git clone https://seu-repositorio.com/projeto.git
-    cd projeto/backend
-
-    # Crie e ative um ambiente virtual (recomendado)
+    # Ambiente virtual
     python -m venv venv
     source venv/bin/activate  # No Windows: venv\Scripts\activate
 
@@ -56,7 +52,7 @@ O projeto é dividido em duas partes: Backend (servidor FastAPI) e Frontend (apl
     b. Configure sua chave de API:
     Crie um arquivo chamado .env na raiz da pasta backend e adicione sua chave da OpenAI:
     ```
-    OPENAI_API_KEY="sk-sua-chave-secreta-aqui"
+    OPENAI_API_KEY="sk-sua-chave-aqui"
     ```
 
     c. Execute o servidor:
@@ -74,7 +70,13 @@ O projeto é dividido em duas partes: Backend (servidor FastAPI) e Frontend (apl
     npm install
     ```
 
-    b. Execute a aplicação:
+    b. Configure sua URL da API:
+    Crie um arquivo chamado .env na raiz da pasta chat-frontend e adicione sua URL da API backend:
+    ```
+    VITE_API_BASE_URL=http://127.0.0.1:8000
+    ```
+
+    c. Execute a aplicação:
     ```
     npm run dev
     ```
