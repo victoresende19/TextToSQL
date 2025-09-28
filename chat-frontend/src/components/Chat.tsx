@@ -1,10 +1,8 @@
-// src/Chat.tsx
+// src/components/Chat.tsx
 
 import React, { useState, useRef, useEffect, type FormEvent } from 'react';
 import './Chat.css';
 
-// ### NOVA INTERFACE ###
-// Para tipar os dados que virão do novo endpoint /tables
 interface TableInfo {
     table_name: string;
     description: string;
@@ -15,54 +13,40 @@ interface Message {
     sender: 'user' | 'bot';
 }
 
+// NOVO: Define a tipagem das props que o Chat agora recebe
+interface ChatProps {
+    configuredTables: TableInfo[];
+}
+
 const API_URL = import.meta.env.VITE_API_BASE_URL;
 
-const Chat: React.FC = () => {
+const Chat: React.FC<ChatProps> = ({ configuredTables }) => { // ALTERADO: Recebe configuredTables como prop
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
-    // ### NOVOS ESTADOS ###
-    const [configuredTables, setConfiguredTables] = useState<TableInfo[]>([]);
-    const [initialLoading, setInitialLoading] = useState(true); // Para o carregamento inicial das tabelas
-
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
-    // Efeito para carregar as tabelas configuradas ao iniciar o componente
+    // ALTERADO: O useEffect agora apenas monta a mensagem de boas-vindas.
+    // Ele não busca mais os dados, pois já os recebeu via props.
     useEffect(() => {
-        const fetchTables = async () => {
-            try {
-                const response = await fetch(`${API_URL}/tables`);
-                if (!response.ok) {
-                    throw new Error("Agente não configurado no backend.");
+        if (configuredTables.length > 0) {
+            const tableNames = configuredTables.map(t => t.table_name).join(', ');
+            setMessages([
+                {
+                    text: `Olá! Estou pronto para responder perguntas sobre as seguintes bases: ${tableNames}.`,
+                    sender: 'bot'
                 }
-                const data: TableInfo[] = await response.json();
-                setConfiguredTables(data);
-
-                // Cria a mensagem de boas-vindas com a lista de tabelas
-                const tableNames = data.map(t => t.table_name).join(', ');
-                setMessages([
-                    {
-                        text: `Olá! Estou pronto para responder perguntas sobre as seguintes bases: ${tableNames}.`,
-                        sender: 'bot'
-                    }
-                ]);
-
-            } catch (error) {
-                console.error("Erro ao buscar tabelas:", error);
-                setMessages([
-                    {
-                        text: "Não consegui carregar a configuração das bases de dados. Verifique se o backend foi configurado corretamente.",
-                        sender: 'bot'
-                    }
-                ]);
-            } finally {
-                setInitialLoading(false);
-            }
-        };
-
-        fetchTables();
-    }, []); // Array vazio garante que rode apenas uma vez
+            ]);
+        } else {
+            setMessages([
+                {
+                    text: "Olá! Parece que nenhuma tabela foi configurada para consulta.",
+                    sender: 'bot'
+                }
+            ]);
+        }
+    }, [configuredTables]); // Depende de configuredTables para re-renderizar se necessário
 
     // Efeito para rolar para a última mensagem
     useEffect(() => {
@@ -105,11 +89,9 @@ const Chat: React.FC = () => {
         <div className="chat-container">
             <header className="chat-header">
                 <h1>Converse com a IA</h1>
-                {/* ### NOVA SEÇÃO: LISTA DE TABELAS ### */}
                 <div className="tables-info">
-                    {initialLoading ? (
-                        <p>Carregando configuração...</p>
-                    ) : configuredTables.length > 0 ? (
+                    {/* ALTERADO: A exibição agora depende diretamente da prop */}
+                    {configuredTables.length > 0 ? (
                         <>
                             <span>Consultando:</span>
                             <div className="tables-list">
@@ -121,7 +103,7 @@ const Chat: React.FC = () => {
                             </div>
                         </>
                     ) : (
-                        <p>Bases não configuradas.</p>
+                        <p>Nenhuma base configurada.</p>
                     )}
                 </div>
             </header>
@@ -147,10 +129,10 @@ const Chat: React.FC = () => {
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         placeholder="Digite sua pergunta aqui..."
-                        disabled={isLoading || initialLoading} // Desabilita enquanto carrega as tabelas
+                        disabled={isLoading}
                         autoFocus
                     />
-                    <button type="submit" disabled={isLoading || initialLoading}>
+                    <button type="submit" disabled={isLoading}>
                         Enviar
                     </button>
                 </form>
@@ -159,4 +141,4 @@ const Chat: React.FC = () => {
     );
 };
 
-export default Chat;
+export default Chat;    

@@ -1,10 +1,12 @@
-// src/ConfigModal.tsx
+// src/components/ConfigModal.tsx
 
 import React, { useState } from 'react';
+import type { FormEvent } from 'react';
 
 // Tipagem para a props do componente
 interface ConfigModalProps {
-    onConfigSuccess: () => void;
+    // ALTERADO: A função de sucesso agora espera receber a lista de tabelas
+    onConfigSuccess: (tables: Table[]) => void;
     onClose: () => void;
 }
 
@@ -16,126 +18,194 @@ interface Table {
 
 const API_URL = import.meta.env.VITE_API_BASE_URL;
 
-// 👇 CORREÇÃO 1: Adicione 'onClose' na desestruturação das props
-const ConfigModal: React.FC<ConfigModalProps> = ({ onConfigSuccess, onClose }) => {
-    // Estados para os campos do formulário
-    const [dialect, setDialect] = useState('sqlite');
-    const [connectionString, setConnectionString] = useState('sqlite:///db/database.db');
-    const [tables, setTables] = useState<Table[]>([
-        { table_name: 'clientes', description: 'Esta tabela armazena informações sobre os clientes.' },
-        { table_name: 'produtos', description: 'Contém a lista de produtos disponíveis e seus preços.' },
-        { table_name: 'vendas', description: 'Registra todas as transações de vendas.' },
-    ]);
+const dialectOptions = [
+    { value: 'sqlite', label: 'SQLite', template: 'sqlite:///db/database.db' },
+    { value: 'postgresql+psycopg2', label: 'PostgreSQL', template: 'postgresql+psycopg2://user:password@host:5432/database' },
+    { value: 'mssql+pyodbc', label: 'SQL Server', template: 'mssql+pyodbc://user:password@host/database?driver=ODBC+Driver+17+for+SQL+Server' }
+];
 
-    // Estados para controle de UI
-    const [isLoading, setIsLoading] = useState(false);
+const ConfigModal: React.FC<ConfigModalProps> = ({ onConfigSuccess, onClose }) => {
+    const [dialect, setDialect] = useState(dialectOptions[1].value);
+    const [connectionString, setConnectionString] = useState(dialectOptions[1].template);
+    const [tables, setTables] = useState<Table[]>([]);
+    const [isConnected, setIsConnected] = useState(false);
+    const [isConnecting, setIsConnecting] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    // Funções para manipular a lista de tabelas
+    const handleDialectChange = (newDialect: { value: string; template: string; }) => {
+        setDialect(newDialect.value);
+        setConnectionString(newDialect.template);
+        setIsConnected(false);
+        setTables([]);
+        setError(null);
+    };
+
+    const handleConnectAndFetchTables = async () => {
+        setIsConnecting(true);
+        setError(null);
+        const connectionPayload = {
+            db_credentials: { dialect, connection_string: connectionString },
+            tables: [],
+        };
+        try {
+            const configResponse = await fetch(`${API_URL}/configure_agent`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(connectionPayload),
+            });
+            if (!configResponse.ok) {
+                const errorData = await configResponse.json();
+                throw new Error(errorData.detail || 'Falha ao conectar ao banco de dados.');
+            }
+            const tablesResponse = await fetch(`${API_URL}/tables`);
+            if (!tablesResponse.ok) {
+                throw new Error('Conexão bem-sucedida, mas falha ao listar as tabelas.');
+            }
+            const fetchedTables: Table[] = await tablesResponse.json();
+            setTables(fetchedTables.map(t => ({ table_name: t.table_name, description: '' })));
+            setIsConnected(true);
+        } catch (err: any) {
+            setError(err.message);
+        } finally {
+            setIsConnecting(false);
+        }
+    };
+
     const handleTableChange = (index: number, field: keyof Table, value: string) => {
         const newTables = [...tables];
         newTables[index][field] = value;
         setTables(newTables);
     };
 
-    const handleAddTable = () => {
-        setTables([...tables, { table_name: '', description: '' }]);
+    const handleRemoveTable = (indexToRemove: number) => {
+        setTables(tables.filter((_, index) => index !== indexToRemove));
     };
 
-    const handleRemoveTable = (index: number) => {
-        const newTables = tables.filter((_, i) => i !== index);
-        setTables(newTables);
-    };
-
-    // Função para enviar a configuração para o backend
-    const handleConfigure = async (e: React.FormEvent) => {
+    const handleFinalSubmit = async (e: FormEvent) => {
         e.preventDefault();
-        setIsLoading(true);
+        setIsSubmitting(true);
         setError(null);
-
-        const payload = {
+        const finalPayload = {
             db_credentials: { dialect, connection_string: connectionString },
             tables,
         };
-
         try {
             const response = await fetch(`${API_URL}/configure_agent`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
+                body: JSON.stringify(finalPayload),
             });
-
             if (!response.ok) {
                 const errorData = await response.json();
                 throw new Error(errorData.detail || 'Ocorreu um erro desconhecido.');
             }
-
-            // Se a configuração foi bem-sucedida, chama a função do componente pai
-            onConfigSuccess();
-
+            // ALTERADO: Passa a lista final de tabelas para a função de sucesso
+            onConfigSuccess(tables);
         } catch (err: any) {
             setError(err.message);
         } finally {
-            setIsLoading(false);
+            setIsSubmitting(false);
         }
     };
 
 
     return (
         <div className="modal-overlay">
+            {/* O restante do JSX do modal permanece exatamente o mesmo */}
+            {/* ... */}
             <div className="modal-content">
-                {/* 👇 CORREÇÃO 2: Adicione o botão para usar a função onClose */}
                 <button className="close-btn" onClick={onClose}>&times;</button>
-
                 <h2>Configurar Agente de Banco de Dados</h2>
-                <p>Forneça as informações de conexão e descreva as tabelas que serão consultadas.</p>
-
-                <form onSubmit={handleConfigure}>
+                <p>Siga os passos para conectar e configurar seu banco de dados.</p>
+                <form onSubmit={handleFinalSubmit}>
                     <fieldset>
-                        <legend>Credenciais do Banco</legend>
+                        <legend>Passo 1: Credenciais do Banco</legend>
                         <label>
-                            Dialeto (ex: sqlite, postgresql+psycopg2):
-                            <input type="text" value={dialect} onChange={(e) => setDialect(e.target.value)} required />
+                            Dialeto do Banco de Dados:
+                            <div className="dialect-selector">
+                                {dialectOptions.map((option) => (
+                                    <button
+                                        type="button"
+                                        key={option.value}
+                                        className={`dialect-option ${dialect === option.value ? 'active' : ''}`}
+                                        onClick={() => handleDialectChange(option)}
+                                        disabled={isConnecting || isConnected}
+                                    >
+                                        {option.label}
+                                    </button>
+                                ))}
+                            </div>
                         </label>
                         <label>
                             String de Conexão:
-                            <input type="text" value={connectionString} onChange={(e) => setConnectionString(e.target.value)} required />
+                            <input
+                                type="text"
+                                value={connectionString}
+                                onChange={(e) => {
+                                    setConnectionString(e.target.value);
+                                    setIsConnected(false);
+                                    setTables([]);
+                                }}
+                                required
+                                disabled={isConnecting || isConnected}
+                            />
                         </label>
+                        {!isConnected && (
+                            <button
+                                type="button"
+                                className="connect-btn"
+                                onClick={handleConnectAndFetchTables}
+                                disabled={isConnecting}
+                            >
+                                {isConnecting ? 'Conectando...' : 'Conectar e Listar Tabelas'}
+                            </button>
+                        )}
                     </fieldset>
 
-                    <fieldset>
-                        <legend>Tabelas para Consulta</legend>
-                        {tables.map((table, index) => (
-                            <div className="table-entry" key={index}>
-                                <input
-                                    type="text"
-                                    placeholder="Nome da tabela"
-                                    value={table.table_name}
-                                    onChange={(e) => handleTableChange(index, 'table_name', e.target.value)}
-                                    required
-                                />
-                                <input
-                                    type="text"
-                                    placeholder="Descrição da tabela"
-                                    value={table.description}
-                                    onChange={(e) => handleTableChange(index, 'description', e.target.value)}
-                                    required
-                                />
-                                <button type="button" className="remove-btn" onClick={() => handleRemoveTable(index)}>
-                                    &times;
-                                </button>
-                            </div>
-                        ))}
-                        <button type="button" className="add-btn" onClick={handleAddTable}>
-                            + Adicionar Tabela
-                        </button>
+                    <fieldset disabled={!isConnected}>
+                        <legend>Passo 2: Descreva as Tabelas para Consulta</legend>
+                        {tables.length > 0 ? (
+                            tables.map((table, index) => (
+                                <div className="table-entry" key={table.table_name}>
+                                    <input
+                                        type="text"
+                                        placeholder="Nome da tabela"
+                                        value={table.table_name}
+                                        readOnly
+                                        className="readonly-input"
+                                    />
+                                    <input
+                                        type="text"
+                                        placeholder="Descrição da tabela para a IA"
+                                        value={table.description}
+                                        onChange={(e) => handleTableChange(index, 'description', e.target.value)}
+                                        required
+                                    />
+                                    <button
+                                        type="button"
+                                        className="remove-table-btn"
+                                        title="Remover Tabela"
+                                        onClick={() => handleRemoveTable(index)}
+                                    >
+                                        &times;
+                                    </button>
+                                </div>
+                            ))
+                        ) : (
+                            <p className="placeholder-text">
+                                {isConnected ? 'Nenhuma tabela encontrada no banco de dados.' : 'Aguardando conexão para listar as tabelas...'}
+                            </p>
+                        )}
                     </fieldset>
 
                     {error && <div className="error-message">{error}</div>}
 
-                    <button type="submit" className="submit-btn" disabled={isLoading}>
-                        {isLoading ? 'Configurando...' : 'Iniciar Chat'}
-                    </button>
+                    {isConnected && (
+                        <button type="submit" className="submit-btn" disabled={isSubmitting}>
+                            {isSubmitting ? 'Configurando...' : 'Iniciar Chat'}
+                        </button>
+                    )}
                 </form>
             </div>
         </div>

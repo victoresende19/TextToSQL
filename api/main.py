@@ -186,20 +186,60 @@ async def root():
 
 @app.get("/tables", response_model=List[TableInfo], tags=["Configuração"])
 def get_configured_tables():
-    if "tables_info" not in app_state:
-        raise HTTPException(status_code=404, detail="Agente não configurado.")
-    return app_state["tables_info"]
+    """
+    Retorna a lista de todas as tabelas encontradas no banco de dados após uma conexão bem-sucedida.
+    """
+    # Verifica se a conexão foi estabelecida no passo anterior
+    if "db_engine" not in app_state:
+        raise HTTPException(
+            status_code=404, 
+            detail="A conexão com o banco de dados ainda não foi estabelecida. Por favor, conecte-se primeiro."
+        )
+    
+    try:
+        engine = app_state["db_engine"]
+        inspector = inspect(engine)
+        table_names = inspector.get_table_names()
+
+        # Retorna a lista de nomes de tabelas no formato que o frontend espera (TableInfo)
+        return [TableInfo(table_name=name, description="") for name in table_names]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao inspecionar o banco de dados: {str(e)}")
 
 @app.post("/configure_agent", status_code=200)
 def configure_agent(config: AgentConfiguration):
+    """
+    Configura o agente. Se a lista de tabelas estiver vazia, apenas testa a conexão.
+    Se a lista de tabelas estiver preenchida, configura o agente completo.
+    """
     try:
+        # Passo 1: Sempre criar o engine para testar a conexão
         db_engine = create_engine(config.db_credentials.connection_string)
+        # Tenta conectar para validar as credenciais
+        connection = db_engine.connect()
+        connection.close()
+
+        # Guarda o engine e as credenciais para o próximo passo
+        app_state["db_engine"] = db_engine
+        app_state["db_credentials"] = config.db_credentials
+        app_state["tables_info"] = config.tables
+        app_state["conversation_history"] = []
+
+        # Passo 2: VERIFICAR se é apenas um teste de conexão
+        # Se a lista de tabelas enviada estiver vazia, paramos por aqui.
+        if not config.tables:
+            print("--- CONEXÃO TESTADA COM SUCESSO ---")
+            return {"message": "Conexão com o banco de dados bem-sucedida."}
+
+        # Passo 3: Se a lista de tabelas NÃO estiver vazia, continue com a configuração completa
+        print("--- CONFIGURAÇÃO FINAL DO AGENTE ---")
         inspector = inspect(db_engine)
         table_names = [t.table_name for t in config.tables]
         schemas = {
             name: f"CREATE TABLE {name} (\n" + ",\n".join([f"  {col['name']} {str(col['type'])}" for col in inspector.get_columns(name)]) + "\n);"
             for name in table_names if inspector.get_columns(name)
         }
+
         chroma_client = chromadb.Client()
         embedding_func = embedding_functions.OpenAIEmbeddingFunction(api_key=OPENAI_API_KEY, model_name=EMBEDDING_MODEL)
         chroma_collection = chroma_client.get_or_create_collection(name="dynamic_db_agent_memory", embedding_function=embedding_func)
@@ -210,6 +250,7 @@ def configure_agent(config: AgentConfiguration):
             if existing_ids:
                 chroma_collection.delete(ids=existing_ids)
         
+        # Agora, esta chamada nunca terá listas vazias
         chroma_collection.add(
             documents=[t.description for t in config.tables],
             metadatas=[{"table_name": t.table_name, "schema": schemas.get(t.table_name, "")} for t in config.tables],
@@ -217,6 +258,7 @@ def configure_agent(config: AgentConfiguration):
         )
         
         workflow = StateGraph(GraphState)
+        # ... (adição de nós e arestas do workflow sem alterações)
         workflow.add_node("route_tables", partial(route_tables_node, chroma_collection=chroma_collection))
         workflow.add_node("generate_sql", partial(generate_sql_node, dialect=config.db_credentials.dialect))
         workflow.add_node("execute_sql", partial(execute_sql_node, engine=db_engine))
@@ -228,21 +270,19 @@ def configure_agent(config: AgentConfiguration):
         workflow.add_edge("generate_sql", "execute_sql")
         workflow.add_edge("execute_sql", "validate_relevance")
         
-        # CORREÇÃO: Lógica condicional ajustada
         workflow.add_conditional_edges("validate_relevance", decide_next_node, {
             "Erro (SQL ou Validação)": "generate_sql",
             "Sucesso na Validação": "generate_final_answer",
-            "Limite de Tentativas Atingido": "generate_final_answer" # Manda para gerar uma resposta de erro
+            "Limite de Tentativas Atingido": "generate_final_answer"
         })
         workflow.add_edge("generate_final_answer", END)
         
         app_state["agent"] = workflow.compile()
-        app_state["db_engine"] = db_engine
-        app_state["tables_info"] = config.tables
-        app_state["conversation_history"] = []
         
         return {"message": "Agente configurado com sucesso."}
+        
     except Exception as e:
+        # Retorna o erro original para o frontend, que é mais útil
         raise HTTPException(status_code=500, detail=f"Falha ao configurar o agente: {str(e)}")
 
 

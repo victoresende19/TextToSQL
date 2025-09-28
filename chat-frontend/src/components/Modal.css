@@ -164,3 +164,118 @@
 .close-btn:hover {
   color: #333;
 }
+
+/* Adicione estas novas regras ao final de src/components/Modal.css */
+
+.dialect-selector {
+  display: flex;
+  gap: 5px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  padding: 5px;
+  background-color: #f0f2f5;
+  width: 100%;
+}
+
+.dialect-option {
+  flex: 1; /* Faz os botões ocuparem o mesmo espaço */
+  padding: 0.6rem;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background-color: transparent;
+  color: #444;
+  font-weight: 500;
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.2s ease-in-out;
+}
+
+.dialect-option:not(.active):hover {
+  background-color: #e4e6eb;
+  color: #111;
+}
+
+.dialect-option.active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transform: translateY(-1px);
+}
+
+/* Adicione estas novas regras ao final de src/components/Modal.css */
+
+.connect-btn {
+  margin-top: 1rem;
+  padding: 0.8rem;
+  border: none;
+  background-color: #28a745; /* Verde para ação de sucesso */
+  color: white;
+  border-radius: 6px;
+  font-size: 1rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.connect-btn:hover:not(:disabled) {
+  background-color: #218838;
+}
+
+.connect-btn:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}
+
+/* Estilo para quando o fieldset de tabelas estiver desabilitado */
+fieldset:disabled {
+  opacity: 0.5;
+  background-color: #f9f9f9;
+}
+
+/* Estilo para o input de nome de tabela que não pode ser editado */
+.readonly-input {
+  background-color: #e9ecef;
+  color: #495057;
+  cursor: not-allowed;
+}
+
+/* Texto de placeholder para a área de tabelas */
+.placeholder-text {
+  text-align: center;
+  color: #888;
+  font-style: italic;
+  padding: 1rem;
+}
+
+/* Adicione estas novas regras ao final de src/components/Modal.css */
+
+/* Pequeno ajuste para garantir o alinhamento vertical dos itens */
+.table-entry {
+  align-items: center;
+}
+
+.remove-table-btn {
+  background: #fde2e2;
+  color: #c53030;
+  border: none;
+  border-radius: 10%; /* Deixa o botão redondo */
+  width: 32px;
+  height: 32px;
+  font-size: 1.5rem;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  line-height: 1;
+  padding-bottom: 3px; /* Ajuste visual do 'X' */
+  margin-left: 0.5rem;
+  transition: all 0.2s ease-in-out;
+}
+
+.remove-table-btn:hover {
+  background: #c53030;
+  color: white;
+  transform: scale(1.1);
+}

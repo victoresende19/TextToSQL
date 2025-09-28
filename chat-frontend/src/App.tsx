@@ -13,16 +13,25 @@ import './components/LandingPage.css';
 // Define os possíveis estados da nossa aplicação
 type AppState = 'landing' | 'configuring' | 'chat';
 
+// NOVO: Define a tipagem da tabela para ser usada aqui
+interface TableInfo {
+  table_name: string;
+  description: string;
+}
+
 function App() {
   const [appState, setAppState] = useState<AppState>('landing');
+  // NOVO: Estado para armazenar a lista de tabelas configuradas
+  const [configuredTables, setConfiguredTables] = useState<TableInfo[]>([]);
 
-  // Funções para transitar entre os estados
   const handleStartConfiguration = () => {
     setAppState('configuring');
   };
 
-  const handleConfigSuccess = () => {
-    setAppState('chat');
+  // ALTERADO: A função agora recebe a lista de tabelas do modal
+  const handleConfigSuccess = (finalTables: TableInfo[]) => {
+    setConfiguredTables(finalTables); // Armazena a lista de tabelas
+    setAppState('chat'); // Muda para a tela de chat
   };
 
   const handleCloseModal = () => {
@@ -31,19 +40,16 @@ function App() {
 
   return (
     <div className="App">
-      {/* O Chat é exclusivo e substitui a página inicial */}
       {appState === 'chat' ? (
-        <Chat />
+        // ALTERADO: Passa a lista de tabelas configuradas como prop para o Chat
+        <Chat configuredTables={configuredTables} />
       ) : (
         <>
-          {/* A página de boas-vindas fica sempre ao fundo */}
           <LandingPage onStartConfiguration={handleStartConfiguration} />
-
-          {/* O modal aparece sobre a página de boas-vindas quando estamos configurando */}
           {appState === 'configuring' && (
             <ConfigModal
               onConfigSuccess={handleConfigSuccess}
-              onClose={handleCloseModal} // Passamos uma função para fechar o modal
+              onClose={handleCloseModal}
             />
           )}
         </>
