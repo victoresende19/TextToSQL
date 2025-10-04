@@ -74,14 +74,53 @@ def route_tables_node(state: GraphState, chroma_collection) -> Dict:
 
 def generate_sql_node(state: GraphState, dialect: str) -> Dict:
     print("--- GERANDO SQL ---")
-    system_prompt = f"Você é um especialista em SQL. Sua tarefa é gerar uma única e sintaticamente correta query SQL no dialeto {dialect} para responder à pergunta do usuário, utilizando os schemas de tabela fornecidos. Responda apenas com a query."
-    user_prompt = f"Pergunta: '{state['question']}'\n\nSchemas:\n{state['tables']}\n\n{ 'Erro anterior, corrija a query: ' + state['error'] if state.get('error') else '' }"
-    messages = [{"role": "system", "content": system_prompt}, *state.get('history', []), {"role": "user", "content": user_prompt}]
+
+    # Recuperando exemplos (sugestão do ponto 3)
+    # few_shot_examples = buscar_exemplos_do_chroma(state["question"])
+
+    prompt_template = f"""
+    # Tarefa: Gerador de Query SQL
+
+    ## Persona
+    Você é um especialista em SQL, treinado para gerar queries sintaticamente corretas no dialeto **{dialect}**. Sua função é traduzir a pergunta do usuário na query mais precisa possível, usando o schema e as descrições fornecidas como guia semântico.
+
+    ---
+    ## Contexto: Schema do Banco de Dados
+    Abaixo estão os schemas e as descrições das tabelas relevantes para a pergunta.
+
+    {state['tables']}
+
+    ---
+    ## Regras
+    1.  **Fidelidade ao Schema:** Use apenas as tabelas e colunas definidas no contexto.
+    2.  **Relações (JOINs):** Construa `JOINs` corretos com base na lógica das chaves e descrições.
+    3.  **Saída Limpa:** Sua resposta final deve ser apenas o código SQL, através da ferramenta `sql_query`.
+    4.  **NUNCA** esqueça de trazer dados não nulos (ex: `WHERE column IS NOT NULL`).
+    5.  **SEMPRE** coloque as variáveis entre aspas duplas (ex: `WHERE column = "value"`).
+    6.  **Limite de Resultados:** Sempre que possível, limite os resultados.
+
+    ---
+    ## Erro Anterior (se houver)
+    Corrija a query com base neste erro: {state['error']}
+
+    ---
+    ## Pergunta do Usuário
+    "{state['question']}"
+    """
+    
+    # Limpa a mensagem de erro se não houver erro
+    final_prompt = prompt_template.replace("## Erro Anterior (se houver)\nCorrija a query com base neste erro: None\n\n---", "")
+
+    messages = [
+        # O prompt do sistema já está bem detalhado no template
+        *state.get('history', []),
+        {"role": "user", "content": final_prompt}
+    ]
     
     response = client.chat.completions.create(
-        model=CHAT_MODEL, 
-        messages=messages, 
-        tools=[{"type": "function", "function": {"name": "sql_query", "parameters": SQLQuery.model_json_schema()}}], 
+        model=CHAT_MODEL,
+        messages=messages,
+        tools=[{"type": "function", "function": {"name": "sql_query", "parameters": SQLQuery.model_json_schema()}}],
         tool_choice={"type": "function", "function": {"name": "sql_query"}}
     )
     sql_query = SQLQuery(**json.loads(response.choices[0].message.tool_calls[0].function.arguments)).query
