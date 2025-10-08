@@ -116,7 +116,7 @@ Esta fase é executada quando o endpoint ```/configure_agent``` é chamado com a
 
 Ao final desta fase, o sistema possui um índice de busca semântica em memória, onde cada descrição de tabela é representada por um vetor e está vinculada ao seu schema técnico.
 
-<hr>
+----------
 
 **Fase 2 - Execução de uma Pergunta**
 Este fluxo é executado a cada chamada ao endpoint ```/query```.
