@@ -100,6 +100,7 @@ Obs.: A aplicação ja possui dados de exemplo. Dessa forma você pode testar de
 O processo todo pode ser dividido em duas grandes fases: primeiro, preparamos a "biblioteca" de conhecimento do agente e, segundo, descrevemos como o "bibliotecário" (o agente) usa essa biblioteca para encontrar respostas.
 
 **Fase 1 - Construindo a "Biblioteca Inteligente" (A Base de Conhecimento)**
+
 Antes de qualquer pergunta, precisamos organizar o conhecimento para a IA. É como montar uma biblioteca e catalogar os livros.
 
 1. **O "Endereço" da Biblioteca (String de Conexão):** Primeiro, você informa ao sistema onde a "biblioteca" de dados brutos está localizada. A string de conexão é o endereço exato que o agente usará para acessar o banco de dados.
@@ -110,8 +111,8 @@ Antes de qualquer pergunta, precisamos organizar o conhecimento para a IA. É co
 
 
 **Fase 2 - O Fluxo de uma Pergunta (A Conversa com o "Bibliotecário")**
-Agora que a biblioteca está organizada, você pode conversar com o agente. Veja como ele "pensa":
 
+Agora que a biblioteca está organizada, você pode conversar com o agente. Veja como ele "pensa":
 **Sua Pergunta:** "Qual ano teve mais terremotos?"
 
 1. **Roteamento (O Bibliotecário Encontra a Prateleira Certa) - ```Route Tables```:** O agente transforma sua pergunta em um "endereço" no mesmo "mapa de significados". Em seguida, ele consulta o "catálogo inteligente" (ChromaDB) e pergunta: "Qual etiqueta de livro tem o endereço mais próximo do endereço da minha pergunta?". Ele identifica que a tabela terremotos é a mais relevante para responder.
