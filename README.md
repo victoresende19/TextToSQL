@@ -98,4 +98,16 @@ Obs.: A aplicação ja possui dados de exemplo. Dessa forma você pode testar de
 
 # Fluxo Agente
 
+Base de conhecimento:
+ - Preenchimento por parte do usuário da string de conexão com o banco de dados de interesse.
+ - Preenchimento por parte do usuário das descrições das tabelas de interesse.
+ - Vetorização em embedding da respectiva tabela, descrição e schema.
+
+Pergunta ao agente:
+- **Route tables:** Identifica a tabela que melhor responde a pergunta do usuário
+- **Generate SQL:** Após identificada a melhor tabela para responder, gera o código SQL (com base no schema da tabela)
+- **Execute SQL:** Visando resultados determinísticos e mitigar o uso da janela de contexto (não passar todos os dados na tabela e deixar o GPT decidir), executa a query sugerida anteriormente via Python
+- **Validate relevance:** Valida se o resultado da query faz sentido (tenta até 3x)
+- **Generate final answer:** Gera a resposta final com base no resultado da query SQL
+
 ![alt text](image-1.png)
