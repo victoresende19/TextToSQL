@@ -113,6 +113,7 @@ Antes de qualquer pergunta, precisamos organizar o conhecimento para a IA. É co
 **Fase 2 - O Fluxo de uma Pergunta (A Conversa com o "Bibliotecário")**
 
 Agora que a biblioteca está organizada, você pode conversar com o agente. Veja como ele "pensa":
+
 **Sua Pergunta:** "Qual ano teve mais terremotos?"
 
 1. **Roteamento (O Bibliotecário Encontra a Prateleira Certa) - ```Route Tables```:** O agente transforma sua pergunta em um "endereço" no mesmo "mapa de significados". Em seguida, ele consulta o "catálogo inteligente" (ChromaDB) e pergunta: "Qual etiqueta de livro tem o endereço mais próximo do endereço da minha pergunta?". Ele identifica que a tabela terremotos é a mais relevante para responder.
