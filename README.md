@@ -102,13 +102,17 @@ O processo é dividido em duas fases principais: a Configuração, que ocorre um
 **Fase 1 - Configuração e Indexação da Base de Conhecimento**
 Esta fase é executada quando o endpoint ```/configure_agent``` é chamado com a configuração final. O objetivo é preparar o contexto para o agente.
 
-1. **Entrada do Usuário:** O sistema recebe as credenciais do banco de dados e uma lista de tabelas de interesse, cada uma com um nome e uma descrição textual fornecida pelo usuário.
+1. **Entrada do Usuário:**
+    - O sistema recebe as credenciais do banco de dados e uma lista de tabelas de interesse, cada uma com um nome e uma descrição textual fornecida pelo usuário.
 
-2. **Extração de Schema:** O backend conecta-se ao banco de dados especificado. Para cada tabela na lista de interesse, ele extrai o schema técnico completo (a estrutura ```CREATE TABLE``` com todas as colunas e seus tipos de dados).
+2. **Extração de Schema:**
+   - O backend conecta-se ao banco de dados especificado. Para cada tabela na lista de interesse, ele extrai o schema técnico completo (a estrutura ```CREATE TABLE``` com todas as colunas e seus tipos de dados).
 
-3. **Vetorização (Embedding):** Para cada tabela, a **descrição** em texto fornecida pelo usuário é enviada a um modelo de embedding (ex: ```text-embedding-3-small``` da OpenAI). Este modelo converte a descrição em um vetor (uma representação numérica de seu significado semântico).
+3. **Vetorização (Embedding):**
+   - Para cada tabela, a **descrição** em texto fornecida pelo usuário é enviada a um modelo de embedding (ex: ```text-embedding-3-small``` da OpenAI). Este modelo converte a descrição em um vetor (uma representação numérica de seu significado semântico).
 
-4. **Indexação no Banco Vetorial:** O vetor gerado é armazenado em uma coleção do ChromaDB em memória. O nome da tabela e seu schema técnico completo são armazenados como **metadata**, diretamente associados a esse vetor, mas sem serem vetorizados.
+4. **Indexação no Banco Vetorial:**
+   - O vetor gerado é armazenado em uma coleção do ChromaDB em memória. O nome da tabela e seu schema técnico completo são armazenados como **metadata**, diretamente associados a esse vetor, mas sem serem vetorizados.
 
 Ao final desta fase, o sistema possui um índice de busca semântica em memória, onde cada descrição de tabela é representada por um vetor e está vinculada ao seu schema técnico.
 
@@ -117,26 +121,25 @@ Ao final desta fase, o sistema possui um índice de busca semântica em memória
 Este fluxo é executado a cada chamada ao endpoint ```/query```.
 
 1. **Roteamento de Tabelas (```Route Tables```):**
-- A pergunta do usuário (ex: "Qual ano teve mais terremotos?") é convertida em um vetor usando o mesmo modelo de embedding.
-- O ChromaDB realiza uma busca por **similaridade semântica** (distância de cosseno), comparando o vetor da pergunta com os vetores das descrições das tabelas já indexadas.
-- As ```N``` tabelas mais semanticamente relevantes são identificadas. Os **metadados** dessas tabelas (incluindo seus schemas) são recuperados.
+    - A pergunta do usuário (ex: "Qual ano teve mais terremotos?") é convertida em um vetor usando o mesmo modelo de embedding.
+    - O ChromaDB realiza uma busca por **similaridade semântica** (distância de cosseno), comparando o vetor da pergunta com os vetores das descrições das tabelas já indexadas.
+    - As ```N``` tabelas mais semanticamente relevantes são identificadas. Os **metadados** dessas tabelas (incluindo seus schemas) são recuperados.
 
 2. **Geração de SQL (```Generate SQL```):**
-
-- Os schemas das tabelas recuperadas na etapa anterior são combinados com a pergunta original do usuário para formar um prompt de contexto.
-- Este prompt é enviado a um Large Language Model (LLM) com a instrução de gerar uma única e sintaticamente correta query SQL para responder à pergunta.
+    - Os schemas das tabelas recuperadas na etapa anterior são combinados com a pergunta original do usuário para formar um prompt de contexto.
+    - Este prompt é enviado a um Large Language Model (LLM) com a instrução de gerar uma única e sintaticamente correta query SQL para responder à pergunta.
 
 3. **Execução de SQL (```Execute SQL```):**
-- A query SQL gerada pelo LLM é executada diretamente no banco de dados de destino através do SQLAlchemy.
-- Esta abordagem garante um resultado determinístico e otimiza o uso da janela de contexto, pois evita passar grandes volumes de dados brutos da tabela para o LLM. O resultado da query é retornado para o próximo passo.
+    - A query SQL gerada pelo LLM é executada diretamente no banco de dados de destino através do SQLAlchemy.
+    - Esta abordagem garante um resultado determinístico e otimiza o uso da janela de contexto, pois evita passar grandes volumes de dados brutos da tabela para o LLM. O resultado da query é retornado para o próximo passo.
 
 4. **Validação de Relevância (```Validate Relevance```):**
-- O resultado da query, a query SQL e a pergunta original são enviados a um LLM para uma validação.
-- A IA verifica se o resultado obtido é uma resposta lógica e relevante para a pergunta feita. Em caso de falha, o processo pode retornar à etapa de Geração de SQL para uma nova tentativa (configurado para um máximo de 3 tentativas).
+    - O resultado da query, a query SQL e a pergunta original são enviados a um LLM para uma validação.
+    - A IA verifica se o resultado obtido é uma resposta lógica e relevante para a pergunta feita. Em caso de falha, o processo pode retornar à etapa de Geração de SQL para uma nova tentativa (configurado para um máximo de 3 tentativas).
 
 5. **Geração da Resposta Final (```Generate Final Answer```):**
-- Após a validação, o resultado da query SQL e a pergunta original são enviados ao LLM.
-- A tarefa final do modelo é sintetizar esses dados brutos em uma resposta coesa e em linguagem natural para ser apresentada ao usuário.
+    - Após a validação, o resultado da query SQL e a pergunta original são enviados ao LLM.
+    - A tarefa final do modelo é sintetizar esses dados brutos em uma resposta coesa e em linguagem natural para ser apresentada ao usuário.
 
 
 ![alt text](image-1.png)
