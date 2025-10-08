@@ -97,17 +97,31 @@ Obs.: A aplicação ja possui dados de exemplo. Dessa forma você pode testar de
 - **Exemplo:** "Liste os 5 produtos mais vendidos no último mês."
 
 # Fluxo Agente
+O processo todo pode ser dividido em duas grandes fases: primeiro, preparamos a "biblioteca" de conhecimento do agente e, segundo, descrevemos como o "bibliotecário" (o agente) usa essa biblioteca para encontrar respostas.
 
-Base de conhecimento:
- - Preenchimento por parte do usuário da string de conexão com o banco de dados de interesse.
- - Preenchimento por parte do usuário das descrições das tabelas de interesse.
- - Vetorização em embedding da respectiva tabela, descrição e schema.
+**Fase 1 - Construindo a "Biblioteca Inteligente" (A Base de Conhecimento)**
+Antes de qualquer pergunta, precisamos organizar o conhecimento para a IA. É como montar uma biblioteca e catalogar os livros.
 
-Pergunta ao agente:
-- **Route tables:** Identifica a tabela que melhor responde a pergunta do usuário
-- **Generate SQL:** Após identificada a melhor tabela para responder, gera o código SQL (com base no schema da tabela)
-- **Execute SQL:** Visando resultados determinísticos e mitigar o uso da janela de contexto (não passar todos os dados na tabela e deixar o GPT decidir), executa a query sugerida anteriormente via Python
-- **Validate relevance:** Valida se o resultado da query faz sentido (tenta até 3x)
-- **Generate final answer:** Gera a resposta final com base no resultado da query SQL
+1. **O "Endereço" da Biblioteca (String de Conexão):** Primeiro, você informa ao sistema onde a "biblioteca" de dados brutos está localizada. A string de conexão é o endereço exato que o agente usará para acessar o banco de dados.
 
+2. **As "Etiquetas" dos Livros (Descrição das Tabelas:** Um banco de dados pode ter dezenas de tabelas ("livros"). Em vez de a IA ter que ler todos eles, você cria uma "etiqueta" (a descrição) para cada tabela de interesse. Esta é a etapa mais importante, pois uma boa etiqueta (ex: "Tabela com dados de vendas, incluindo cliente e produto") permite que a IA entenda rapidamente o conteúdo de cada "livro".
+
+3. **Criando o "Catálogo Inteligente" (Banco Vetorial com ChromaDB):** É aqui que a mágica acontece. O sistema pega apenas a descrição de cada tabela e a transforma em um "endereço" numérico único (o embedding) dentro de um "mapa de significados". O schema técnico (```CREATE TABLE...```) não é transformado em endereço, mas é guardado como uma "anotação" junto a esse endereço. Ao final, temos um catálogo que não busca por palavras, mas por proximidade de significado.
+
+
+**Fase 2 - O Fluxo de uma Pergunta (A Conversa com o "Bibliotecário")**
+Agora que a biblioteca está organizada, você pode conversar com o agente. Veja como ele "pensa":
+
+**Sua Pergunta:** "Qual ano teve mais terremotos?"
+
+1. **Roteamento (O Bibliotecário Encontra a Prateleira Certa) - ```Route Tables```:** O agente transforma sua pergunta em um "endereço" no mesmo "mapa de significados". Em seguida, ele consulta o "catálogo inteligente" (ChromaDB) e pergunta: "Qual etiqueta de livro tem o endereço mais próximo do endereço da minha pergunta?". Ele identifica que a tabela terremotos é a mais relevante para responder.
+2. 
+3. **Geração de SQL (O Bibliotecário Lê o Índice do Livro) - ```Generate SQL```:** Com a tabela certa em mãos, o agente agora pega o schema técnico dela (a "anotação" que estava guardada). O schema funciona como o índice de um livro, mostrando todas as colunas e seus tipos. A IA, então, usa sua pergunta e este schema específico para escrever o código SQL exato necessário para encontrar a informação.
+
+4. **Execução do SQL (O Bibliotecário Busca a Informação) - ```Execute SQL```:** Em vez de "folhear" a tabela inteira e deixar a IA "decidir" a resposta (o que seria lento, caro e imprevisível), o sistema executa a query SQL diretamente no banco de dados via Python. Isso garante que o resultado seja preciso, rápido e determinístico. O agente recebe de volta apenas os dados brutos e relevantes, como ```[{'Year': 2011, 'total': 500}]```.
+
+5. **Validação (A Checagem de Qualidade) - ```Validate Relevance```:** Antes de prosseguir, uma parte especializada da IA faz uma verificação rápida: "O resultado que eu obtive (```[{'Year': 2011, 'total': 500}]```) parece responder à pergunta original ('Qual ano teve mais terremotos?')?". Se a resposta for "não" (por exemplo, se a query retornou o local em vez do ano), o processo volta para a etapa 2 para tentar uma nova abordagem (isso acontece até 3 vezes).
+
+6. **Resposta Final (A Explicação em Linguagem Humana) - ```Generate Final Answer```:** Com o resultado validado, os dados brutos são entregues à parte final da IA, que age como um tradutor. Ela pega os dados ([{'Year': 2011, 'total': 500}]) e os transforma em uma resposta amigável e fácil de entender: "O ano com mais terremotos registrados foi 2011, com um total de 500 ocorrências."
+7. 
 ![alt text](image-1.png)
